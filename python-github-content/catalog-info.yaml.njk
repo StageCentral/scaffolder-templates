@@ -1,0 +1,37 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: ${{ values.name }}
+  annotations:
+    # informs where TechDocs source content is stored so that it can be read and docs can be generated from it. 
+    # Most commonly, it's written as a path, relative to the location of the catalog-info.yaml itself, where the associated mkdocs.yml file can be found.
+    # In unusual situations where the documentation for a catalog entity does not live alongside the entity's source code, the value of this annotation can point to an absolute URL, 
+    # matching the location reference string format outlined above, for example: url:https://github.com/backstage/backstage/tree/master
+    backstage.io/managed-by-location: url:https://github.com/${{ values.org }}/backstage/tree/test-run/examples/template/python-github-content/catalog-info.yaml
+    backstage.io/techdocs-ref: dir:. # TechDocs integration
+    github.com/project-slug: ${{ values.org }}/${{ values.repo  }} # GH Actions CI/CD Integration
+    github.com/user-login: ${{ values.org }}
+    environemts: ${{ values.envs | join('/') }}
+    runtime: ${{ values.runtime }}
+  links:
+    - url: https://google.com
+      title: Service test link
+      icon: dashboard
+spec:
+  type: service
+  owner: ${{ values.owner }}
+  lifecycle: experimental
+  {%- if ( values.deps_apis | length ) > 0 %}
+  consumesApis:
+    {%- for api in values.deps_apis -%}
+      {# - example-grpc-api #}
+      - ${{ api }}
+    {%- endfor %}
+  {%- endif %}
+  {%- if ( values.deps_res | length ) > 0 %}
+  dependsOn:
+    {%- for res in values.deps_res -%}
+    {# - resource:default/custom-rdb #}
+    - resource:default/${{ res }}
+    {%- endfor %}
+  {%- endif %}

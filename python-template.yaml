@@ -1,0 +1,262 @@
+
+---
+
+apiVersion: scaffolder.backstage.io/v1beta3
+kind: Template
+metadata:
+  name: python-app
+  title: Template For Python Application
+  description: scaffolder that creates a a Python workload anywhere
+  tags:
+    - otomato
+    - czm41k
+spec:
+  owner: user:guest
+  type: service
+
+  # These parameters are used to generate the input form in the frontend, and are
+  # used to gather input data for the execution of the template.
+  parameters:
+    - title: Meta data and location
+      required:
+        - name
+        - owner
+        - repoUrl
+      properties:
+        name:
+          title: Name
+          type: string
+          description: Unique name of the component
+          ui:autofocus: true
+          ui:options:
+            rows: 5
+        owner:
+          title: Owner
+          type: string
+          description: Owner of the component
+          ui:field: OwnerPicker
+          ui:options:
+            catalogFilter:
+              kind: User
+        repoUrl:
+          title: Repository Location
+          type: string
+          ui:field: RepoUrlPicker
+          ui:options:
+            allowedHosts:
+              - github.com
+        dryRun:
+          title: Only perform a dry run, don't publish anything
+          type: boolean
+          default: false
+    - title: Runtime, environments and Infra/API dependencies
+      required:
+        - runtime
+        - envs
+        - deps_res
+        - deps_apis
+      properties:
+        runtime:
+          title: Runtime environment
+          type: string
+          description: Select environment to run your workload in
+          default: vm
+          enum:
+            - vm
+            - container
+            - orchestrator
+          enumNames:
+            - "Virtual Machine (vm)"
+            - "Container Runtime (container)"
+            - "Orchestrator"
+        envs:
+          title: Environments
+          type: array
+          items:
+            type: string
+            enum:
+              - production
+              - staging
+              - development
+          uniqueItems: true
+          ui:widget: checkboxes
+        deps_res:
+          title: Resource dependencies
+          description: List of deps your service relies on (e.g. database etc)
+          type: array
+          default: []
+          items:
+            type: string
+            ui:field: EntityPicker
+            ui:options:
+              allowedKinds:
+                - Resource
+              allowedPermissions:
+                - Read
+              defaultKind: Resource
+          uniqueItems: true
+        deps_apis:
+          title: Dependant from APIs
+          description: List of APIs your service is dependant on
+          type: array
+          default: []
+          items:
+            type: string
+            ui:field: EntityPicker
+            ui:options:
+              allowedKinds:
+                - API
+              allowedPermissions:
+                - Read
+              defaultKind: API
+        entityTags:
+          type: array
+          ui:field: EntityTagsPicker
+    - title: Features & Launch options
+      required:
+        - features
+        - run_args
+        - exposed_ports
+      properties:
+        features:
+          title: Select features
+          type: array
+          default: []
+          items:
+            type: string
+            enum:
+              - 'cicd'
+              - 'monitoring'
+              - 'documentation'
+          uniqueItems: true
+          ui:widget: checkboxes
+        run_args:
+          type: string
+          description: 'Which file and with which args entrypoint should run in format ["python", <my_app_name> ...]'
+          default: '[ "python" ]'
+        custom_image:
+          type: string
+          description: Specify image for your app
+        exposed_ports:
+          type: string
+          default: ""
+          description: Specify string with space-separated ports to expose for your app
+
+  # These steps are executed in the scaffolder backend, using data that we gathered
+  # via the parameters above.
+  steps:
+    # Each step executes an action, in this case one templates files into the working directory.
+    - id: fetch-base-content
+      name: Fetch Base Content
+      action: fetch:template
+      input:
+        url: ./python-github-content
+        values:
+          name: ${{ parameters.name }}
+          repo: ${{ (parameters.repoUrl | parseRepoUrl).repo }}
+          org: ${{ (parameters.repoUrl | parseRepoUrl).owner }}
+          features: ${{ parameters.features }}
+          runtime: ${{ parameters.runtime }}
+          envs: ${{ parameters.envs }}
+          deps_res: ${{ parameters.deps_res }}
+          deps_apis: ${{ parameters.deps_apis }}
+          owner: ${{ parameters.owner }}
+        templateFileExtension: true # to render only *.njk files
+
+    - name: Log features and runtime
+      action: debug:log
+      input:
+        message: |
+          Features are: ${{ parameters.features | join("; ") }}
+          Runtime: ${{ parameters.runtime }}
+
+    - if: '${{ not (parameters.runtime == "vm") }}'
+      id: fetch-docker
+      name: Fetch Docker
+      action: fetch:template
+      input:
+        url: ./docker
+        values:
+          name: ${{ parameters.name }}
+          entrtypoint: ""
+          image: ${{ parameters.custom_image | default("python:3.10-slim-buster") }}
+          ports: ${{ parameters.exposed_ports }}
+          package_manager: "pip3"
+          dependency_file: "requirements.txt"
+          copy_wildcard: "*.py"
+          cmd: ${{ parameters.run_args }}
+        templateFileExtension: true # to render only *.njk files
+
+    - if: '${{ "documentation" in parameters.features }}'
+      id: fetch-docs
+      name: Fetch Docs
+      action: fetch:template
+      input:
+        url: ./documentation
+        values:
+          name: ${{ parameters.name }}-docs
+          homepage: "index.md"
+        templateFileExtension: true # to render only *.njk files
+
+    - if: '${{ "cicd" in parameters.features }}'
+      id: fetch-cicd
+      name: Fetch CI/CD
+      action: fetch:template
+      input:
+        url: ./cicd/github-actions # Should be templatized in future
+        values:
+          name: ${{ parameters.name }}
+          lang: python
+          triggers: [push,pull_request,workflow_dispatch]
+          branch_whitelist: [main,master]
+          lint: true
+          docker: ${{ not (parameters.runtime == "vm") }}
+          helm: ${{ parameters.runtime == "orchestrator" }}
+        templateFileExtension: true # to render only *.njk files
+
+    # We cannot render files in hidden dirs. So, making proper name after rendering
+    - if: '${{ "cicd" in parameters.features }}'
+      id: rename-cicd
+      name: Rename CI/CD directory
+      action: fs:rename
+      input:
+        files:
+          - from: github/
+            to: .github/
+            overwrite: true
+
+    # This step publishes the contents of the working directory to GitHub.
+    - if: '${{ not parameters.dryRun }}'
+      id: publish
+      name: Publish
+      action: publish:github
+      input:
+        allowedHosts: ['github.com']
+        description: This is ${{ parameters.name }}
+        repoUrl: ${{ parameters.repoUrl }}
+
+    # The final step is to register our new component in the catalog.
+    - id: register
+      if: '${{ not parameters.dryRun }}'
+      name: Register
+      action: catalog:register
+      input:
+        repoContentsUrl: ${{ steps.publish.output.repoContentsUrl }}
+        catalogInfoPath: '/catalog-info.yaml'
+
+  # Outputs are displayed to the user after a successful execution of the template.
+  output:
+    links:
+      - title: Repository
+        url: ${{ steps.publish.output.remoteUrl }}
+      - title: Open in catalog
+        icon: catalog
+        entityRef: ${{ steps.register.output.entityRef }}
+      - if: '${{ "cicd" in parameters.features }}' # Conditional URL
+        title: CI/CD
+        description: Workaround link until native GH Actions CICD integrated
+        url: ${{ steps.publish.output.remoteUrl | replace(".git","") }}/actions
+      - if: '${{ "monitoring" in parameters.features }}' # Conditional URL
+        title: Monitoring
+        description: Link to created Monitoring
+        url: https://google.com

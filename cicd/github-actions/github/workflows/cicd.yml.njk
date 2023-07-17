@@ -1,0 +1,41 @@
+---
+name: 'Simple ${{ values.lang }} CI'
+on:
+{%- for tr in values.triggers %}
+  ${{ tr }}:
+    {%- if values.branch_whitelist and not (tr=='workflow_dispatch')%}
+    branches: ["${{ values.branch_whitelist | join('\", \"') }}"]
+    {%- endif %}
+{%- endfor %}
+
+jobs:
+{%- if values.lint %}
+  lint:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Lint
+        run: echo running some linter here
+{%- endif %}
+{%- if values.docker %}
+  docker_build:
+    {% if values.lint %}needs: [lint]{% endif %}
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Lint
+        run: echo running some linter here
+{%- if values.helm %}
+  helm_deploy:
+    needs: [docker_build]
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Deploy step
+        run: echo helm upgrade --install blah blah
+{%- else %}
+  deploy:
+    needs: [docker_build]
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Deploy step
+        run: echo Deploying docker somehow another way
+{%- endif %}
+{%- endif %}

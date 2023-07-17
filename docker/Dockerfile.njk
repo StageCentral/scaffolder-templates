@@ -1,0 +1,16 @@
+FROM ${{ values.image }}
+
+WORKDIR /app
+
+COPY ${{ values.dependency_file }} ${{ values.dependency_file }}
+{%- if  values.package_manager == 'pip3' %} 
+RUN pip3 install --no-cache-dir -r ${{ values.dependency_file }}
+{%- endif %}
+
+COPY ${{ values.copy_wildcard }} .
+
+{% if not values.ports == "" %}EXPOSE ${{ values.ports }}{% endif %}
+
+{% if not values.entrypoint == "" %}ENTRYPOINT ${{ values.entrypoint }}{% endif %}
+{# CMD [ "waitress-serve", "--call" , "app:create_app" ] #}
+CMD ${{ values.cmd }}
