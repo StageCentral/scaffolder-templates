@@ -4,12 +4,11 @@
 apiVersion: scaffolder.backstage.io/v1beta3
 kind: Template
 metadata:
-  name: python-app
-  title: Template For Python Application
-  description: scaffolder that creates a a Python workload anywhere
+  name: python-flask
+  title: Template For a Python Flask Application
+  description:  Scaffold a Python Flask Webapp
   tags:
-    - otomato
-    - czm41k
+    - stagecentral
 spec:
   owner: user:guest
   type: service

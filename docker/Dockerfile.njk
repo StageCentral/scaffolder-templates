@@ -12,5 +12,5 @@ COPY ${{ values.copy_wildcard }} .
 {% if not values.ports == "" %}EXPOSE ${{ values.ports }}{% endif %}
 
 {% if not values.entrypoint == "" %}ENTRYPOINT ${{ values.entrypoint }}{% endif %}
-{# CMD [ "waitress-serve", "--call" , "app:create_app" ] #}
+{# CMD [ "gunicorn", "-w 3" , "app:app" ] #}
 CMD ${{ values.cmd }}
