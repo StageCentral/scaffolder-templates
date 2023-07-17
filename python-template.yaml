@@ -193,7 +193,7 @@ spec:
       input:
         url: ./documentation
         values:
-          name: ${{ parameters.name }}-docs
+          name: ${{ parameters.name }}
           homepage: "index.md"
         templateFileExtension: true # to render only *.njk files
 
